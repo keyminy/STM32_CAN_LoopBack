@@ -70,6 +70,8 @@ int _write(int file, char *ptr, int len)
 
 void CAN1_Init(void);
 void CAN1_Tx(void);
+void CAN1_Rx(void);
+void CAN_Filter_Config(void);
 /* USER CODE END 0 */
 
 /**
@@ -99,16 +101,18 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_CAN1_Init();
+//  MX_CAN1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 //  HAL_TIM_Base_Start_IT(&htim3);
   HAL_UART_Receive_IT(&huart2, &rx_data,1); // size : 1byte
-//  CAN1_Init();
+  CAN1_Init();
+  CAN_Filter_Config();
   if(HAL_CAN_Start(&hcan1) != HAL_OK){
 	  Error_Handler();
   }
   CAN1_Tx();
+  CAN1_Rx();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -224,14 +228,14 @@ void CAN1_Init(void){
 	hcan1.Init.TimeTriggeredMode = DISABLE;
 	hcan1.Init.TransmitFifoPriority = DISABLE;// priority driven by the identifier of the msg
 
-	// Settings related to CAN bit timings
-	// Bit rate is 500kbps
 /*	hcan1.Init.Prescaler = 6;
 	hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
 	hcan1.Init.TimeSeg1 = CAN_BS1_11TQ;
 	hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;*/
 
 
+	// Settings related to CAN bit timings
+	// Bit rate is 500kbps
 	hcan1.Init.Prescaler = 5;
 	hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
 	hcan1.Init.TimeSeg1 = CAN_BS1_8TQ;
@@ -241,7 +245,39 @@ void CAN1_Init(void){
 		Error_Handler();
 	}
 }
+void CAN1_Rx(void){
+	char msg[50];
+	CAN_RxHeaderTypeDef RxHeader;
+	uint8_t rcvd_msg[5];// to save received data
 
+	// wait until some message comes to the FIFO( not euqal to 0)
+	while(!HAL_CAN_GetRxFifoFillLevel(&hcan1,CAN_RX_FIFO0));
+
+	if(HAL_CAN_GetRxMessage(&hcan1,CAN_RX_FIFO0
+						,&RxHeader,rcvd_msg) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	sprintf(msg,"Message Received : %s\r\n",rcvd_msg);
+	HAL_UART_Transmit(&huart2,(uint8_t*)msg,strlen(msg),HAL_MAX_DELAY);
+}
+void CAN_Filter_Config(void){
+	CAN_FilterTypeDef can1_filter_init;
+	can1_filter_init.FilterActivation = ENABLE;
+	can1_filter_init.FilterBank = 0;
+	can1_filter_init.FilterFIFOAssignment = CAN_RX_FIFO0;
+	can1_filter_init.FilterIdHigh = 0x000;
+	can1_filter_init.FilterIdLow = 0x000;
+	can1_filter_init.FilterMaskIdHigh = 0x000;
+	can1_filter_init.FilterMaskIdLow = 0x000;
+	// use MASK Mode
+	can1_filter_init.FilterMode = CAN_FILTERMODE_IDMASK;
+	can1_filter_init.FilterScale = CAN_FILTERSCALE_32BIT;
+
+	if(HAL_CAN_ConfigFilter(&hcan1, &can1_filter_init) != HAL_OK){
+		Error_Handler();
+	}
+}
 
 /* USER CODE END 4 */
 
